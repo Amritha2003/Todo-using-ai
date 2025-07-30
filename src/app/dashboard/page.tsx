@@ -114,7 +114,14 @@ export default function TaskTable() {
         return;
       }
 
-      const taskData: any = {
+      const taskData: {
+        title: string;
+        user_id: string;
+        status: string;
+        start_date?: string;
+        due_date?: string;
+        project_id?: string;
+      } = {
         title: title.trim(),
         user_id: user.id,
         status: status
@@ -142,7 +149,7 @@ export default function TaskTable() {
         // Refresh the task list
         fetchTasks();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error in handleAddTask:", error);
     }
   };

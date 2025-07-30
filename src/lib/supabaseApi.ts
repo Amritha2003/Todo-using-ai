@@ -1,30 +1,72 @@
 // Supabase API utility functions using fetch
 import { supabase } from './supabaseClient';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+interface ApiResponse<T> {
+  data: T | null;
+  error: string | null;
+}
+
+// Helper function to get authenticated user
+const getAuthenticatedUser = async () => {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    throw new Error('User not authenticated');
+  }
+  return user;
+};
+
+// Generic fetch wrapper for authenticated requests
+const authenticatedFetch = async <T>(
+  url: string, 
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> => {
+  try {
+    const user = await getAuthenticatedUser();
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${user.id}`,
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return { data, error: null };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { data: null, error: errorMessage };
+  }
+};
 
 // Fetch API wrapper functions
-export const fetchApi = {
+const fetchApi = {
   // GET request
-  get: async (endpoint: string, params?: Record<string, any>) => {
+  get: async (endpoint: string, params?: Record<string, string>) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     
-    const url = new URL(`${SUPABASE_URL}/rest/v1${endpoint}`);
+    const url = new URL(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1${endpoint}`);
     
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url.searchParams.append(key, value);
       });
     }
-
+    
     const response = await fetch(url.toString(), {
       headers: {
-        'apikey': SUPABASE_ANON_KEY!,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-      },
+        'Prefer': 'return=representation'
+      }
     });
 
     if (!response.ok) {
@@ -36,18 +78,19 @@ export const fetchApi = {
   },
 
   // POST request
-  post: async (endpoint: string, data: any) => {
+  post: async (endpoint: string, data: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     
-    const response = await fetch(`${SUPABASE_URL}/rest/v1${endpoint}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1${endpoint}`, {
       method: 'POST',
       headers: {
-        'apikey': SUPABASE_ANON_KEY!,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
 
     if (!response.ok) {
@@ -59,18 +102,19 @@ export const fetchApi = {
   },
 
   // PATCH request
-  patch: async (endpoint: string, data: any) => {
+  patch: async (endpoint: string, data: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     
-    const response = await fetch(`${SUPABASE_URL}/rest/v1${endpoint}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1${endpoint}`, {
       method: 'PATCH',
       headers: {
-        'apikey': SUPABASE_ANON_KEY!,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
 
     if (!response.ok) {
@@ -86,13 +130,13 @@ export const fetchApi = {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     
-    const response = await fetch(`${SUPABASE_URL}/rest/v1${endpoint}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1${endpoint}`, {
       method: 'DELETE',
       headers: {
-        'apikey': SUPABASE_ANON_KEY!,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+        'Content-Type': 'application/json'
+      }
     });
 
     if (!response.ok) {
@@ -108,8 +152,7 @@ export const fetchApi = {
 export const taskApi = {
   // Get all tasks for current user
   getTasks: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
     
     return fetchApi.get('/tasks', {
       user_id: `eq.${user.id}`,
@@ -126,8 +169,7 @@ export const taskApi = {
     project_id: string;
     status?: string;
   }) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
 
     // Server-side date validation
     if (taskData.start_date && isNaN(Date.parse(taskData.start_date))) {
@@ -183,8 +225,7 @@ export const taskApi = {
 
   // Get tasks by status
   getTasksByStatus: async (status: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
     
     return fetchApi.get('/tasks', {
       user_id: `eq.${user.id}`,
@@ -196,8 +237,7 @@ export const taskApi = {
 
   // Get overdue tasks
   getOverdueTasks: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
     
     const today = new Date().toISOString().split('T')[0];
     return fetchApi.get('/tasks', {
@@ -213,8 +253,7 @@ export const taskApi = {
 export const projectApi = {
   // Get all projects for current user
   getProjects: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
     
     return fetchApi.get('/projects', {
       user_id: `eq.${user.id}`,
@@ -225,8 +264,7 @@ export const projectApi = {
 
   // Create a new project
   createProject: async (projectData: { name: string }) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+    const user = await getAuthenticatedUser();
     
     return fetchApi.post('/projects', {
       ...projectData,
@@ -235,7 +273,8 @@ export const projectApi = {
   },
 };
 
-export default {
+// Export the API functions
+export const supabaseApi = {
   fetchApi,
   taskApi,
   projectApi,
